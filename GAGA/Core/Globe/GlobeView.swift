@@ -25,6 +25,7 @@ struct GlobeView: UIViewRepresentable {
         baseMaterial.diffuse.contents = UIColor(red: 0.2, green: 0.4, blue: 0.8, alpha: 1.0) // 海の青色
         baseMaterial.specular.contents = UIColor.white
         baseMaterial.shininess = 0.1
+        baseMaterial.lightingModel = .constant // 影を削除（均一な明るさ）
         globe.materials = [baseMaterial]
 
         let globeNode = SCNNode(geometry: globe)
@@ -50,6 +51,22 @@ struct GlobeView: UIViewRepresentable {
         ambientLight.light!.type = .ambient
         ambientLight.light!.color = UIColor(white: 0.3, alpha: 1.0)
         scene.rootNode.addChildNode(ambientLight)
+
+        // 星空背景を設定
+        if let starfield = UIImage(named: "starfield") {
+            print("✅ Starfield image loaded successfully")
+            scene.background.contents = starfield
+            scene.background.intensity = 0.6 // 明るさ調整（0.5〜1.0で調整可能）
+        } else {
+            print("❌ Failed to load starfield image")
+            print("📁 Checking alternative names...")
+            // 拡張子付きで試す
+            if let starfieldWithExt = UIImage(named: "starfield.jpg") {
+                print("✅ Starfield image loaded with .jpg extension")
+                scene.background.contents = starfieldWithExt
+                scene.background.intensity = 0.6
+            }
+        }
 
         sceneView.scene = scene
         sceneView.allowsCameraControl = true
@@ -201,6 +218,7 @@ struct GlobeView: UIViewRepresentable {
                 material.diffuse.contents = finalTexture
                 material.specular.contents = UIColor.white
                 material.shininess = 0.1
+                material.lightingModel = .constant // 影を削除（均一な明るさ）
                 material.isDoubleSided = false
 
                 // マテリアルを適用
