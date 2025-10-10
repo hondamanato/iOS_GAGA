@@ -6,12 +6,30 @@
 //
 
 import SwiftUI
+import FirebaseCore
+
+// AppDelegate for Firebase initialization
+class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(_ application: UIApplication,
+                    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
+        FirebaseApp.configure()
+        return true
+    }
+}
 
 @main
 struct GAGAApp: App {
+    // Register AppDelegate
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
+    @StateObject private var authManager = AuthManager.shared
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            if authManager.isAuthenticated {
+                MainTabView()
+            } else {
+                LoginView()
+            }
         }
     }
 }
