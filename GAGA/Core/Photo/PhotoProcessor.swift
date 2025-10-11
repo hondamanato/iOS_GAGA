@@ -64,19 +64,52 @@ class PhotoProcessor {
         }
     }
 
-    // 3サイズの画像を生成
-    func processPhotoForUpload(_ image: UIImage) -> (original: Data?, medium: Data?, thumbnail: Data?)? {
-        // オリジナル（最大2MB）
-        let original = compressImage(image, maxSizeKB: 2048)
+    // 3:4 比率でクロップ（中央を切り取り）
+    func cropToAspectRatio(_ image: UIImage, aspectWidth: CGFloat, aspectHeight: CGFloat) -> UIImage {
+        let imageSize = image.size
+        let imageAspect = imageSize.width / imageSize.height
+        let targetAspect = aspectWidth / aspectHeight
 
-        // 中サイズ（1MB、1024x1024以下）
-        let mediumSize = CGSize(width: 1024, height: 1024)
-        let mediumImage = resizeImage(image, targetSize: mediumSize)
+        var cropRect: CGRect
+
+        if imageAspect > targetAspect {
+            // 横長の画像：幅を削る
+            let newWidth = imageSize.height * targetAspect
+            let xOffset = (imageSize.width - newWidth) / 2
+            cropRect = CGRect(x: xOffset, y: 0, width: newWidth, height: imageSize.height)
+        } else {
+            // 縦長の画像：高さを削る
+            let newHeight = imageSize.width / targetAspect
+            let yOffset = (imageSize.height - newHeight) / 2
+            cropRect = CGRect(x: 0, y: yOffset, width: imageSize.width, height: newHeight)
+        }
+
+        guard let cgImage = image.cgImage?.cropping(to: cropRect) else {
+            return image
+        }
+
+        return UIImage(cgImage: cgImage, scale: image.scale, orientation: image.imageOrientation)
+    }
+
+    // 3サイズの画像を生成（3:4 比率に統一）
+    func processPhotoForUpload(_ image: UIImage) -> (original: Data?, medium: Data?, thumbnail: Data?)? {
+        // まず 3:4 比率にクロップ
+        let croppedImage = cropToAspectRatio(image, aspectWidth: 3, aspectHeight: 4)
+
+        // オリジナル（810x1080、最大2MB）
+        let originalSize = CGSize(width: 810, height: 1080)
+        let originalImage = resizeImage(croppedImage, targetSize: originalSize)
+        let original = compressImage(originalImage, maxSizeKB: 2048)
+
+        // 中サイズ（600x800、最大1MB）
+        let mediumSize = CGSize(width: 600, height: 800)
+        let mediumImage = resizeImage(croppedImage, targetSize: mediumSize)
         let medium = compressImage(mediumImage, maxSizeKB: 1024)
 
-        // サムネイル（256KB、256x256）
-        let thumbnailImage = createThumbnail(image)
-        let thumbnail = thumbnailImage.flatMap { compressImage($0, maxSizeKB: 256) }
+        // サムネイル（192x256、最大256KB）
+        let thumbnailSize = CGSize(width: 192, height: 256)
+        let thumbnailImage = resizeImage(croppedImage, targetSize: thumbnailSize)
+        let thumbnail = compressImage(thumbnailImage, maxSizeKB: 256)
 
         return (original, medium, thumbnail)
     }

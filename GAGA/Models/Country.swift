@@ -22,6 +22,16 @@ struct Country: Codable, Identifiable {
         self.geometry = nil
         self.boundingBox = nil
     }
+
+    /// 国旗絵文字を返す（ISO 3166-1 alpha-2コードから生成）
+    var flag: String {
+        // 国コード（例: "JP", "US", "RU"）を国旗絵文字に変換
+        // Unicode Regional Indicator Symbolsを使用
+        let base: UInt32 = 127397 // 🇦の基準値 - "A"のUnicode値
+        return id.uppercased().unicodeScalars.compactMap {
+            UnicodeScalar(base + $0.value)
+        }.map { String($0) }.joined()
+    }
 }
 
 struct CountryGeometry: Codable {

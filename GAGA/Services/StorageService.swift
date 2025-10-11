@@ -30,6 +30,11 @@ class StorageService {
         return downloadURL.absoluteString
     }
 
+    // 画像をアップロード（uploadFileのエイリアス）
+    func uploadImage(_ data: Data, path: String) async throws -> String {
+        return try await uploadFile(data, path: path)
+    }
+
     // Firebase Storageからファイルを削除
     func deleteFile(path: String) async throws {
         let storageRef = storage.reference().child(path)

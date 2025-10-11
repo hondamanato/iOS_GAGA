@@ -14,36 +14,53 @@ class FollowManager: ObservableObject {
     @Published var isFollowing: [String: Bool] = [:]
 
     // ユーザーをフォロー
-    func follow(userId: String) async throws {
-        // TODO: Firestoreにフォロー関係を保存
-        // await FirebaseService.shared.followUser(userId)
-
-        isFollowing[userId] = true
+    func follow(followerId: String, followingId: String) async throws {
+        try await FirebaseService.shared.followUser(
+            followerId: followerId,
+            followingId: followingId
+        )
+        isFollowing[followingId] = true
+        print("✅ FollowManager: Followed \(followingId)")
     }
 
     // フォロー解除
-    func unfollow(userId: String) async throws {
-        // TODO: Firestoreからフォロー関係を削除
-        // await FirebaseService.shared.unfollowUser(userId)
-
-        isFollowing[userId] = false
+    func unfollow(followerId: String, followingId: String) async throws {
+        try await FirebaseService.shared.unfollowUser(
+            followerId: followerId,
+            followingId: followingId
+        )
+        isFollowing[followingId] = false
+        print("✅ FollowManager: Unfollowed \(followingId)")
     }
 
     // フォロワーリストを取得
     func loadFollowers(for userId: String) async throws {
-        // TODO: Firestoreからフォロワーリストを取得
-        followers = []
+        followers = try await FirebaseService.shared.getFollowers(userId: userId)
+        print("✅ FollowManager: Loaded \(followers.count) followers")
     }
 
     // フォロー中リストを取得
     func loadFollowing(for userId: String) async throws {
-        // TODO: Firestoreからフォロー中リストを取得
-        following = []
+        following = try await FirebaseService.shared.getFollowing(userId: userId)
+        print("✅ FollowManager: Loaded \(following.count) following")
     }
 
     // フォロー状態を確認
-    func checkFollowStatus(userId: String) async -> Bool {
-        // TODO: Firestoreでフォロー状態を確認
-        return isFollowing[userId] ?? false
+    func checkFollowStatus(followerId: String, followingId: String) async -> Bool {
+        if let cached = isFollowing[followingId] {
+            return cached
+        }
+
+        do {
+            let status = try await FirebaseService.shared.isFollowing(
+                followerId: followerId,
+                followingId: followingId
+            )
+            isFollowing[followingId] = status
+            return status
+        } catch {
+            print("❌ FollowManager: Failed to check follow status: \(error)")
+            return false
+        }
     }
 }

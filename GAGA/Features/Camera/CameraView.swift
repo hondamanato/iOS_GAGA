@@ -47,9 +47,13 @@ struct CameraView: View {
                         Label("カメラ", systemImage: "camera")
                             .frame(maxWidth: .infinity)
                             .padding()
-                            .background(Color.blue)
-                            .foregroundColor(.white)
+                            .background(Color.white)
+                            .foregroundColor(.black)
                             .cornerRadius(10)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(Color.black, lineWidth: 1)
+                            )
                     }
 
                     Button(action: {
@@ -58,9 +62,13 @@ struct CameraView: View {
                         Label("ライブラリ", systemImage: "photo.on.rectangle")
                             .frame(maxWidth: .infinity)
                             .padding()
-                            .background(Color.blue)
-                            .foregroundColor(.white)
+                            .background(Color.white)
+                            .foregroundColor(.black)
                             .cornerRadius(10)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(Color.black, lineWidth: 1)
+                            )
                     }
                 }
 
@@ -154,9 +162,24 @@ struct CameraView: View {
             try await FirebaseService.shared.savePhoto(photo)
 
             print("✅ Photo metadata saved to Firestore")
+
+            // 4. ユーザーの訪問国リストを更新
+            try await FirebaseService.shared.addVisitedCountry(userId: userId, countryCode: country.id)
+
+            // 5. AuthManagerのcurrentUserも更新
+            if var currentUser = AuthManager.shared.currentUser {
+                if !currentUser.visitedCountries.contains(country.id) {
+                    currentUser.visitedCountries.append(country.id)
+                    currentUser.updatedAt = Date()
+                    await MainActor.run {
+                        AuthManager.shared.currentUser = currentUser
+                    }
+                }
+            }
+
             print("🎉 Upload complete!")
 
-            // 4. 画面を閉じる
+            // 6. 画面を閉じる
             presentationMode.wrappedValue.dismiss()
         } catch {
             print("❌ Upload error: \(error.localizedDescription)")

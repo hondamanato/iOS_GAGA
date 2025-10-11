@@ -9,6 +9,8 @@ import SwiftUI
 
 struct ContentView: View {
     @State private var selectedCountry: Country?
+    @State private var selectedPhoto: Photo?
+    @State private var showPhotoDetail = false
     @State private var showCameraView = false
     @State private var selectedImage: UIImage?
     @State private var photos: [String: Photo] = [:]
@@ -17,8 +19,13 @@ struct ContentView: View {
         NavigationView {
             ZStack {
                 // 3D地球儀
-                GlobeView(selectedCountry: $selectedCountry, photos: photos)
-                    .edgesIgnoringSafeArea(.all)
+                GlobeView(
+                    selectedCountry: $selectedCountry,
+                    selectedPhoto: $selectedPhoto,
+                    showPhotoDetail: $showPhotoDetail,
+                    photos: photos
+                )
+                .edgesIgnoringSafeArea(.all)
 
                 // 上部オーバーレイ
                 VStack {
@@ -33,9 +40,9 @@ struct ContentView: View {
                         }) {
                             Image(systemName: "camera.fill")
                                 .font(.title2)
-                                .foregroundColor(.white)
+                                .foregroundColor(.black)
                                 .padding()
-                                .background(Color.blue)
+                                .background(Color.white)
                                 .clipShape(Circle())
                                 .shadow(radius: 5)
                         }
@@ -70,6 +77,22 @@ struct ContentView: View {
                         .padding(.bottom, 30)
                     }
                 }
+
+                // Invisible NavigationLink for photo detail
+                NavigationLink(
+                    destination: selectedPhoto.map { photo in
+                        PhotoDetailView(photo: photo, onDelete: {
+                            // 削除時の処理：写真リストを再読み込み
+                            Task {
+                                await loadPhotos()
+                            }
+                        })
+                    },
+                    isActive: $showPhotoDetail
+                ) {
+                    EmptyView()
+                }
+                .hidden()
             }
             .navigationBarHidden(true)
             .sheet(isPresented: $showCameraView, onDismiss: {
@@ -141,6 +164,7 @@ struct MainTabView: View {
                     Label("プロフィール", systemImage: "person.fill")
                 }
         }
+        .tint(.black)
     }
 }
 

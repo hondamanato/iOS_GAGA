@@ -10,6 +10,8 @@ import SceneKit
 
 struct GlobeView: UIViewRepresentable {
     @Binding var selectedCountry: Country?
+    @Binding var selectedPhoto: Photo?
+    @Binding var showPhotoDetail: Bool
     var photos: [String: Photo] = [:] // countryCode -> Photo
 
     func makeUIView(context: Context) -> SCNView {
@@ -94,19 +96,32 @@ struct GlobeView: UIViewRepresentable {
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(selectedCountry: $selectedCountry)
+        Coordinator(
+            selectedCountry: $selectedCountry,
+            selectedPhoto: $selectedPhoto,
+            showPhotoDetail: $showPhotoDetail,
+            photos: photos
+        )
     }
 
     class Coordinator: NSObject {
         @Binding var selectedCountry: Country?
+        @Binding var selectedPhoto: Photo?
+        @Binding var showPhotoDetail: Bool
         weak var sceneView: SCNView?
 
         // 差分更新用：既存のテクスチャと写真リストを保持
         private var currentTexture: UIImage?
         private var currentPhotos: [String: Photo] = [:]
 
-        init(selectedCountry: Binding<Country?>) {
+        // タップ時に写真を検出するために保持
+        private var photos: [String: Photo] = [:]
+
+        init(selectedCountry: Binding<Country?>, selectedPhoto: Binding<Photo?>, showPhotoDetail: Binding<Bool>, photos: [String: Photo]) {
             self._selectedCountry = selectedCountry
+            self._selectedPhoto = selectedPhoto
+            self._showPhotoDetail = showPhotoDetail
+            self.photos = photos
         }
 
         @objc func handleTap(_ gesture: UITapGestureRecognizer) {
@@ -128,7 +143,16 @@ struct GlobeView: UIViewRepresentable {
 
                 if let country = country {
                     print("🌍 Selected country: \(country.name) (\(country.id))")
-                    selectedCountry = country
+
+                    // その国に写真があるかチェック
+                    if let photo = photos[country.id] {
+                        print("📸 Photo found for \(country.name), showing detail view")
+                        selectedPhoto = photo
+                        showPhotoDetail = true
+                    } else {
+                        print("ℹ️ No photo for \(country.name), selecting country")
+                        selectedCountry = country
+                    }
                 } else {
                     print("🌊 Tapped on ocean or unrecognized area")
                     selectedCountry = nil
@@ -138,6 +162,9 @@ struct GlobeView: UIViewRepresentable {
 
         func updatePhotos(_ photos: [String: Photo]) {
             guard let scene = sceneView?.scene else { return }
+
+            // タップ検出用に写真リストを更新
+            self.photos = photos
 
             print("📸 Updating photos on globe: \(photos.count) countries")
 
@@ -157,17 +184,26 @@ struct GlobeView: UIViewRepresentable {
             // 初回は必ずテクスチャを作成
             let isFirstTime = currentTexture == nil
 
-            // 新しい写真を検出（差分更新）
+            // 写真リストの変更を検出（追加・削除・変更すべてを含む）
+            let photosChanged = photos.count != currentPhotos.count ||
+                                !photos.allSatisfy { countryCode, photo in
+                                    currentPhotos[countryCode]?.id == photo.id
+                                }
+
+            if !photosChanged && !isFirstTime {
+                print("ℹ️ No changes in photos")
+                return
+            }
+
+            // 新規追加・変更された写真
             let newPhotos = photos.filter { countryCode, photo in
                 currentPhotos[countryCode]?.id != photo.id
             }
 
-            if newPhotos.isEmpty && !isFirstTime {
-                print("ℹ️ No new photos to update")
-                return
-            }
+            // 削除された写真
+            let deletedCountries = currentPhotos.keys.filter { !photos.keys.contains($0) }
 
-            print("📸 Detected \(newPhotos.count) new photos (out of \(photos.count) total)")
+            print("📸 Photos changed: \(newPhotos.count) new/updated, \(deletedCountries.count) deleted (total: \(photos.count) countries)")
 
             // 全国データを取得
             let allCountries = GeoDataManager.shared.getAllCountries()
@@ -408,5 +444,9 @@ struct GlobeView: UIViewRepresentable {
 }
 
 #Preview {
-    GlobeView(selectedCountry: .constant(nil))
+    GlobeView(
+        selectedCountry: .constant(nil),
+        selectedPhoto: .constant(nil),
+        showPhotoDetail: .constant(false)
+    )
 }
