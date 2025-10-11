@@ -18,6 +18,23 @@ struct PhotoDetailView: View {
     @State private var showDeleteConfirmation = false
     @State private var isDeleting = false
 
+    // いいね・保存の状態
+    @State private var isLiked = false
+    @State private var isBookmarked = false
+    @State private var likeCount: Int
+    @State private var isLiking = false
+    @State private var isBookmarking = false
+
+    // コメント・シェア
+    @State private var showCommentView = false
+    @State private var showShareSheet = false
+
+    init(photo: Photo, onDelete: (() -> Void)? = nil) {
+        self.photo = photo
+        self.onDelete = onDelete
+        _likeCount = State(initialValue: photo.likeCount)
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
@@ -49,6 +66,14 @@ struct PhotoDetailView: View {
         } message: {
             Text("この写真を削除してもよろしいですか？この操作は取り消せません。")
         }
+        .sheet(isPresented: $showShareSheet) {
+            if let url = URL(string: photo.imageURL) {
+                ShareSheet(items: [url, photo.caption ?? ""])
+            }
+        }
+        .sheet(isPresented: $showCommentView) {
+            CommentView(photo: photo)
+        }
     }
 
     // MARK: - View Components
@@ -65,28 +90,45 @@ struct PhotoDetailView: View {
                     .foregroundColor(.black)
             }
 
-            // プロフィール画像
-            Circle()
-                .fill(Color.blue.opacity(0.3))
-                .frame(width: 36, height: 36)
-                .overlay(
-                    Image(systemName: "person.fill")
-                        .font(.system(size: 16))
-                        .foregroundColor(.white)
-                )
-
-            // ユーザー名
+            // プロフィール画像とユーザー名（タップでプロフィールへ）
             if let user = user {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(user.displayName)
-                        .font(.system(size: 14, weight: .semibold))
-                    Text("@\(user.username)")
-                        .font(.system(size: 12))
-                        .foregroundColor(.secondary)
+                NavigationLink(destination: UserDetailView(user: user)) {
+                    HStack(spacing: 12) {
+                        // プロフィール画像
+                        Circle()
+                            .fill(Color.blue.opacity(0.3))
+                            .frame(width: 36, height: 36)
+                            .overlay(
+                                Image(systemName: "person.fill")
+                                    .font(.system(size: 16))
+                                    .foregroundColor(.white)
+                            )
+
+                        // ユーザー名
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(user.displayName)
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(.black)
+                            Text("@\(user.username)")
+                                .font(.system(size: 12))
+                                .foregroundColor(.secondary)
+                        }
+                    }
                 }
             } else {
-                ProgressView()
-                    .scaleEffect(0.8)
+                HStack(spacing: 12) {
+                    Circle()
+                        .fill(Color.blue.opacity(0.3))
+                        .frame(width: 36, height: 36)
+                        .overlay(
+                            Image(systemName: "person.fill")
+                                .font(.system(size: 16))
+                                .foregroundColor(.white)
+                        )
+
+                    ProgressView()
+                        .scaleEffect(0.8)
+                }
             }
 
             Spacer()
@@ -142,16 +184,19 @@ struct PhotoDetailView: View {
         HStack(spacing: 16) {
             // いいねボタン
             Button {
-                // TODO: いいね機能を実装
+                Task {
+                    await toggleLike()
+                }
             } label: {
-                Image(systemName: "heart")
+                Image(systemName: isLiked ? "heart.fill" : "heart")
                     .font(.system(size: 24))
-                    .foregroundColor(.black)
+                    .foregroundColor(isLiked ? .red : .black)
             }
+            .disabled(isLiking)
 
             // コメントボタン
             Button {
-                // TODO: コメント機能を実装
+                showCommentView = true
             } label: {
                 Image(systemName: "bubble.left")
                     .font(.system(size: 24))
@@ -160,7 +205,7 @@ struct PhotoDetailView: View {
 
             // シェアボタン
             Button {
-                // TODO: シェア機能を実装
+                showShareSheet = true
             } label: {
                 Image(systemName: "paperplane")
                     .font(.system(size: 24))
@@ -171,14 +216,24 @@ struct PhotoDetailView: View {
 
             // 保存ボタン
             Button {
-                // TODO: 保存機能を実装
+                Task {
+                    await toggleBookmark()
+                }
             } label: {
-                Image(systemName: "bookmark")
+                Image(systemName: isBookmarked ? "bookmark.fill" : "bookmark")
                     .font(.system(size: 24))
                     .foregroundColor(.black)
             }
+            .disabled(isBookmarking)
         }
         .padding(.top, 8)
+
+        // いいね数表示
+        if likeCount > 0 {
+            Text("\(likeCount)人がいいねしました")
+                .font(.system(size: 14, weight: .semibold))
+                .padding(.top, 8)
+        }
     }
 
     @ViewBuilder
@@ -245,10 +300,85 @@ struct PhotoDetailView: View {
             }
         }
 
+        // いいね・保存状態をチェック
+        if let currentUserId = authManager.currentUser?.id {
+            do {
+                let liked = try await PhotoInteractionService.shared.checkIfLiked(photoId: photo.id, userId: currentUserId)
+                let bookmarked = try await PhotoInteractionService.shared.checkIfBookmarked(photoId: photo.id, userId: currentUserId)
+
+                await MainActor.run {
+                    self.isLiked = liked
+                    self.isBookmarked = bookmarked
+                }
+            } catch {
+                print("❌ Failed to check interaction status: \(error)")
+            }
+        }
+
         await MainActor.run {
             isLoading = false
         }
     }
+
+    // MARK: - Interaction Functions
+
+    private func toggleLike() async {
+        guard let currentUserId = authManager.currentUser?.id else { return }
+        guard !isLiking else { return }
+
+        isLiking = true
+
+        do {
+            if isLiked {
+                try await PhotoInteractionService.shared.unlikePhoto(photoId: photo.id, userId: currentUserId)
+                await MainActor.run {
+                    self.isLiked = false
+                    self.likeCount = max(0, likeCount - 1)
+                }
+            } else {
+                try await PhotoInteractionService.shared.likePhoto(photoId: photo.id, userId: currentUserId)
+                await MainActor.run {
+                    self.isLiked = true
+                    self.likeCount += 1
+                }
+            }
+        } catch {
+            print("❌ Failed to toggle like: \(error)")
+        }
+
+        await MainActor.run {
+            isLiking = false
+        }
+    }
+
+    private func toggleBookmark() async {
+        guard let currentUserId = authManager.currentUser?.id else { return }
+        guard !isBookmarking else { return }
+
+        isBookmarking = true
+
+        do {
+            if isBookmarked {
+                try await PhotoInteractionService.shared.unbookmarkPhoto(photoId: photo.id, userId: currentUserId)
+                await MainActor.run {
+                    self.isBookmarked = false
+                }
+            } else {
+                try await PhotoInteractionService.shared.bookmarkPhoto(photoId: photo.id, userId: currentUserId)
+                await MainActor.run {
+                    self.isBookmarked = true
+                }
+            }
+        } catch {
+            print("❌ Failed to toggle bookmark: \(error)")
+        }
+
+        await MainActor.run {
+            isBookmarking = false
+        }
+    }
+
+    // MARK: - Delete Function
 
     private func deletePhoto() async {
         isDeleting = true
@@ -318,6 +448,21 @@ struct PhotoDetailView: View {
         } else {
             return "たった今"
         }
+    }
+}
+
+// MARK: - Share Sheet
+
+struct ShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        let controller = UIActivityViewController(activityItems: items, applicationActivities: nil)
+        return controller
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {
+        // No update needed
     }
 }
 
