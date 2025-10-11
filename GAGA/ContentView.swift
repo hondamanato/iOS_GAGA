@@ -112,6 +112,14 @@ struct ContentView: View {
                 Task {
                     await loadPhotos()
                 }
+
+                // タブバーを再表示（投稿詳細画面から戻った際に必要）
+                DispatchQueue.main.async {
+                    if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                       let tabBarController = windowScene.windows.first?.rootViewController?.children.first as? UITabBarController {
+                        tabBarController.tabBar.isHidden = false
+                    }
+                }
             }
         }
     }
