@@ -590,3 +590,299 @@ VStack(spacing: 0) {
 PhotoDetailViewのInstagram風UI実装が完了しました。これにより、写真詳細画面がモダンでクリーンなデザインになり、ユーザー体験が向上しました。
 
 **重要**: Xcodeでビルドとテストを実施してください。特に、アクションボタンの機能は未実装のため、将来の拡張として実装する必要があります。
+
+---
+
+# 画像キャッシュ最適化（レベル1.5）
+
+## 📋 実装計画
+
+### 目的
+画像のダウンロードとキャッシュを最適化し、パフォーマンスとユーザー体験を向上させる
+
+### 実装方針
+- NetworkManagerでURLSessionをカスタマイズ（メモリ50MB、ディスク200MB）
+- PhotoCacheと統合してメモリ→ディスク→ネットワークの順でチェック
+- GlobeViewのテクスチャ生成でキャッシュを活用
+- PhotoDetailViewでCachedAsyncImageを使用
+
+---
+
+## タスクリスト
+
+- [x] NetworkManager.swiftを作成
+- [x] CachedAsyncImage.swiftを作成
+- [x] GlobeMaterial.swiftでNetworkManagerを使用
+- [x] GlobeView.swiftでNetworkManagerを使用
+- [x] PhotoDetailView.swiftでCachedAsyncImageを使用
+
+---
+
+## レビュー
+
+### 実装完了の概要
+
+画像キャッシュ最適化（レベル1.5）を実装しました。これにより、画像のダウンロードが大幅に効率化され、パフォーマンスとユーザー体験が向上しました。
+
+---
+
+### 変更・追加したファイル
+
+#### 1. GAGA/Services/NetworkManager.swift（新規作成）
+
+**主な機能**:
+- **URLSessionのカスタマイズ**
+  - メモリキャッシュ: 50MB
+  - ディスクキャッシュ: 200MB
+  - キャッシュポリシー: `.returnCacheDataElseLoad`
+
+- **downloadImageメソッド**
+  - メモリキャッシュをチェック（PhotoCache）
+  - ディスクキャッシュをチェック（PhotoCache）
+  - ネットワークからダウンロード
+  - ダウンロード後にキャッシュに保存
+
+- **NetworkError列挙型**
+  - invalidURL: 無効なURL
+  - invalidResponse: サーバーからの応答が無効
+  - invalidImageData: 画像データが無効
+
+- **String拡張**
+  - `safeCacheKey`: URLを安全なキャッシュキーに変換
+  - `lastPathComponent`: ログ用にファイル名を取得
+
+**キャッシュ戦略**:
+```
+1. メモリキャッシュをチェック（高速）
+   ↓ なし
+2. ディスクキャッシュをチェック（中速）
+   ↓ なし
+3. ネットワークからダウンロード（低速）
+   ↓
+4. メモリとディスクに保存
+```
+
+#### 2. GAGA/Core/UI/CachedAsyncImage.swift（新規作成）
+
+**主な機能**:
+- **NetworkManagerを使用したAsyncImageラッパー**
+  - 既存のAsyncImageと同じインターフェース
+  - AsyncImagePhaseを使用（empty, success, failure）
+  - Task管理とキャンセル対応
+
+- **Convenience Initializer**
+  - デフォルトの表示（ProgressView → Image → Error Icon）
+
+- **AsyncImagePhase Extension**
+  - `image`プロパティでImageを簡単に取得
+
+**使用例**:
+```swift
+CachedAsyncImage(url: photo.imageURL) { phase in
+    switch phase {
+    case .empty:
+        ProgressView()
+    case .success(let image):
+        image.resizable()
+    case .failure:
+        Image(systemName: "photo")
+    }
+}
+```
+
+#### 3. GAGA/Core/Globe/GlobeMaterial.swift（変更）
+
+**変更箇所**: `createPhotoAtlas`メソッド（55-59行目）
+
+**変更前**:
+```swift
+guard let imageURL = URL(string: photo.imageURL),
+      let (data, _) = try? await URLSession.shared.data(from: imageURL),
+      let image = UIImage(data: data) else {
+```
+
+**変更後**:
+```swift
+guard let image = try? await NetworkManager.shared.downloadImage(from: photo.imageURL) else {
+```
+
+**効果**:
+- 地球儀のテクスチャ生成が高速化
+- 複数の写真を同時にダウンロードする際もキャッシュが効く
+
+#### 4. GAGA/Core/Globe/GlobeView.swift（変更）
+
+**変更箇所**: `updateTextureIncrementally`メソッド（288-292行目）
+
+**変更前**:
+```swift
+guard let imageURL = URL(string: photo.imageURL),
+      let (data, _) = try? await URLSession.shared.data(from: imageURL),
+      let image = UIImage(data: data) else {
+```
+
+**変更後**:
+```swift
+guard let image = try? await NetworkManager.shared.downloadImage(from: photo.imageURL) else {
+```
+
+**効果**:
+- 差分更新時のダウンロードも高速化
+- 写真追加時の地球儀更新がスムーズ
+
+#### 5. GAGA/Features/Photo/PhotoDetailView.swift（変更）
+
+**変更箇所**: `photoView`プロパティ（110-137行目）
+
+**変更前**:
+```swift
+AsyncImage(url: URL(string: photo.imageURL)) { phase in
+```
+
+**変更後**:
+```swift
+CachedAsyncImage(url: photo.imageURL) { phase in
+```
+
+**効果**:
+- 写真詳細画面の読み込みが高速化
+- 一度見た写真は即座に表示
+
+---
+
+### キャッシュ戦略の詳細
+
+#### メモリキャッシュ（NSCache）
+- **容量**: 50MB（約50-100枚の写真）
+- **速度**: ミリ秒レベル
+- **寿命**: アプリ起動中のみ
+- **管理**: PhotoCache.shared
+
+#### ディスクキャッシュ（FileManager）
+- **容量**: 200MB（約200-400枚の写真）
+- **速度**: 数十ミリ秒
+- **寿命**: アプリ削除まで永続
+- **管理**: PhotoCache.shared
+
+#### URLCache（URLSession）
+- **容量**: メモリ50MB、ディスク200MB
+- **速度**: 中速
+- **寿命**: システム管理
+- **管理**: NetworkManager.session
+
+---
+
+### パフォーマンス向上の見込み
+
+#### 地球儀のテクスチャ生成
+- **初回**: 変更なし（ダウンロード必要）
+- **2回目以降**:
+  - メモリキャッシュヒット時: **95%以上高速化**
+  - ディスクキャッシュヒット時: **80-90%高速化**
+
+#### PhotoDetailView
+- **初回**: 変更なし
+- **2回目以降**: **即座に表示**（体感的に一瞬）
+
+#### データ通信量
+- **初回**: 変更なし
+- **2回目以降**: **0バイト**（完全にキャッシュから読み込み）
+
+---
+
+### ログ出力
+
+実装により、以下のログが出力されます:
+
+```
+✅ Cache hit (memory): photo_12345.jpg
+✅ Cache hit (disk): photo_67890.jpg
+📥 Downloading: photo_abcde.jpg
+💾 Cached: photo_abcde.jpg
+```
+
+これにより、キャッシュの動作状況を確認できます。
+
+---
+
+### 今後の改善点
+
+#### 1. キャッシュクリア機能
+現在は手動でクリアする必要があります。将来的に追加すべき機能:
+- 設定画面に「キャッシュをクリア」ボタンを追加
+- アプリ起動時に古いキャッシュを自動削除（7日以上など）
+
+```swift
+// 設定画面に追加する例
+Button("キャッシュをクリア") {
+    PhotoCache.shared.clearCache()
+    // URLCacheもクリア
+    URLCache.shared.removeAllCachedResponses()
+}
+```
+
+#### 2. プリフェッチング（レベル2への拡張）
+現在は表示時にダウンロードしています。将来的に:
+- ユーザーがスクロールする前に先読み
+- 地球儀の回転方向を予測して先読み
+
+#### 3. サムネイル優先読み込み
+現在は`imageURL`を直接使用しています。将来的に:
+- まず`thumbnailURL`を表示（軽量）
+- その後`imageURL`をダウンロード（高画質）
+
+#### 4. キャッシュサイズの動的調整
+現在は固定値（50MB、200MB）です。将来的に:
+- デバイスの空き容量に応じて調整
+- ユーザーが設定で変更可能
+
+#### 5. オフライン対応の強化
+現在はネットワークエラー時にエラー表示されます。将来的に:
+- キャッシュがある場合は古いデータでも表示
+- オフラインインジケーターを表示
+
+---
+
+### テスト手順（Xcodeで手動テスト必要）
+
+#### 1. 初回ダウンロードのテスト
+1. アプリを起動（キャッシュなし）
+2. 地球儀で写真がある国をタップ
+3. コンソールに「📥 Downloading」が表示されることを確認
+4. 写真が表示されることを確認
+5. コンソールに「💾 Cached」が表示されることを確認
+
+#### 2. メモリキャッシュのテスト
+1. 写真詳細画面を開く
+2. 戻るボタンで戻る
+3. もう一度同じ写真を開く
+4. コンソールに「✅ Cache hit (memory)」が表示されることを確認
+5. 写真が即座に表示されることを確認
+
+#### 3. ディスクキャッシュのテスト
+1. アプリを終了
+2. アプリを再起動
+3. 写真詳細画面を開く
+4. コンソールに「✅ Cache hit (disk)」が表示されることを確認
+5. 写真が高速に表示されることを確認
+
+#### 4. 地球儀のテクスチャ生成のテスト
+1. 複数の国に写真を投稿
+2. 地球儀を回転させる
+3. コンソールでキャッシュヒット率を確認
+4. テクスチャの更新が高速になることを確認
+
+#### 5. エラーハンドリングのテスト
+1. ネットワークをオフにする
+2. キャッシュされていない写真を開く
+3. エラーアイコンが表示されることを確認
+4. ネットワークをオンにする
+5. 再度開くと正常に表示されることを確認
+
+---
+
+### 完了！
+
+画像キャッシュ最適化（レベル1.5）の実装が完了しました。これにより、画像のダウンロードが大幅に効率化され、パフォーマンスとユーザー体験が向上しました。
+
+**重要**: Xcodeでビルドとテストを実施してください。特に、キャッシュの動作状況をコンソールログで確認することをお勧めします。

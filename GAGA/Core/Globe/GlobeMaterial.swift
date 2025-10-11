@@ -52,10 +52,8 @@ class GlobeMaterial {
                 continue
             }
 
-            // 写真をダウンロード
-            guard let imageURL = URL(string: photo.imageURL),
-                  let (data, _) = try? await URLSession.shared.data(from: imageURL),
-                  let image = UIImage(data: data) else {
+            // 写真をダウンロード（NetworkManagerを使用してキャッシュ対応）
+            guard let image = try? await NetworkManager.shared.downloadImage(from: photo.imageURL) else {
                 print("❌ Failed to download image for \(countryCode)")
                 continue
             }

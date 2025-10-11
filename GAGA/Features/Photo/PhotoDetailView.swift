@@ -108,7 +108,7 @@ struct PhotoDetailView: View {
     }
 
     private var photoView: some View {
-        AsyncImage(url: URL(string: photo.imageURL)) { phase in
+        CachedAsyncImage(url: photo.imageURL) { phase in
             switch phase {
             case .empty:
                 ProgressView()
