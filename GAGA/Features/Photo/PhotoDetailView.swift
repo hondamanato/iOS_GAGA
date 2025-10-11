@@ -35,6 +35,7 @@ struct PhotoDetailView: View {
             }
         }
         .navigationBarHidden(true)
+        .toolbar(.hidden, for: .tabBar)
         .task {
             await loadData()
         }
