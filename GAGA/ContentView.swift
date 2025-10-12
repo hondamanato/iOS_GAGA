@@ -104,7 +104,7 @@ struct ContentView: View {
                 }
             }) {
                 if let country = selectedCountry {
-                    CameraView(selectedImage: $selectedImage, selectedCountry: .constant(country))
+                    PhotoComposerView(selectedImage: $selectedImage, selectedCountry: .constant(country))
                 }
             }
             .onAppear {
@@ -173,6 +173,14 @@ struct MainTabView: View {
                 }
         }
         .tint(.black)
+        .onAppear {
+            // タブバーの背景スタイルを統一（半透明のぼかし効果）
+            let appearance = UITabBarAppearance()
+            appearance.configureWithDefaultBackground()
+
+            UITabBar.appearance().standardAppearance = appearance
+            UITabBar.appearance().scrollEdgeAppearance = appearance
+        }
     }
 }
 
