@@ -9,6 +9,7 @@ import SwiftUI
 
 struct UserGlobeView: View {
     let userId: String
+    var onPhotoDeleted: (() -> Void)? = nil
     @State private var photos: [String: Photo] = [:]
     @State private var selectedCountry: Country?
     @State private var selectedPhoto: Photo?
@@ -43,6 +44,8 @@ struct UserGlobeView: View {
                         Task {
                             await loadUserPhotos()
                         }
+                        // ProfileViewに削除を通知
+                        onPhotoDeleted?()
                     })
                 },
                 isActive: $showPhotoDetail

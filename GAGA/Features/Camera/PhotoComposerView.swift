@@ -14,47 +14,29 @@ struct PhotoComposerView: View {
     @State private var isUploading = false
 
     var body: some View {
-        NavigationView {
-            VStack(spacing: 0) {
-                // 写真選択グリッド
-                PhotoGridPickerView(selectedImage: $selectedImage)
-
-                // 投稿ボタン
-                if selectedImage != nil {
-                    Button(action: {
-                        Task {
-                            await uploadPhoto()
-                        }
-                    }) {
-                        if isUploading {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                        } else {
-                            Text("写真を投稿")
-                                .fontWeight(.semibold)
-                        }
+        VStack(spacing: 0) {
+            // 写真選択グリッド
+            PhotoGridPickerView(selectedImage: $selectedImage)
+        }
+        .navigationTitle(selectedCountry?.nameJa ?? selectedCountry?.name ?? "写真を投稿")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(action: {
+                    Task {
+                        await uploadPhoto()
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.green)
-                    .foregroundColor(.white)
-                    .cornerRadius(12)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 12)
-                    .disabled(isUploading)
-                }
-            }
-            .navigationTitle(selectedCountry?.nameJa ?? selectedCountry?.name ?? "写真を投稿")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button(action: {
-                        presentationMode.wrappedValue.dismiss()
-                    }) {
-                        Image(systemName: "xmark")
-                            .foregroundColor(.black)
+                }) {
+                    if isUploading {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .black))
+                    } else {
+                        Text("投稿")
+                            .fontWeight(.semibold)
+                            .foregroundColor(selectedImage != nil ? .blue : .gray)
                     }
                 }
+                .disabled(selectedImage == nil || isUploading)
             }
         }
     }

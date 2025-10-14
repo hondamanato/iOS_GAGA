@@ -404,14 +404,18 @@ struct PhotoDetailView: View {
 
             print("✅ Photo deleted successfully")
 
+            // 削除成功を親ビューに通知（親が写真リストを再読み込み）
+            // 注: dismiss()の前に実行して、確実に更新処理をトリガーする
+            await MainActor.run {
+                onDelete?()
+            }
+
+            // 少し待機してから画面を閉じる（更新処理が開始されるのを待つ）
+            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1秒
+
             // 画面を閉じる
             await MainActor.run {
                 dismiss()
-            }
-
-            // 削除成功を親ビューに通知（親が写真リストを再読み込み）
-            await MainActor.run {
-                onDelete?()
             }
 
         } catch {

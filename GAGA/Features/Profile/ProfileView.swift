@@ -10,6 +10,7 @@ import SwiftUI
 struct ProfileView: View {
     @StateObject private var authManager = AuthManager.shared
     @State private var refreshID = UUID()
+    @State private var globeRefreshTrigger = false
 
     var body: some View {
         NavigationView {
@@ -114,9 +115,14 @@ struct ProfileView: View {
                                 .font(.headline)
                                 .padding(.horizontal)
 
-                            UserGlobeView(userId: user.id)
-                                .frame(height: 300)
-                                .id(refreshID)
+                            UserGlobeView(userId: user.id, onPhotoDeleted: {
+                                // 写真が削除されたらプロフィール情報を再読み込み
+                                Task {
+                                    await refreshUserData()
+                                }
+                            })
+                            .frame(height: 300)
+                            .id(refreshID)
                         }
 
                         Divider()

@@ -221,8 +221,9 @@ struct GlobeView: UIViewRepresentable {
                 let equirectangular = EquirectangularTexture(textureSize: CGSize(width: 2048, height: 1024))
                 let baseTexture = equirectangular.getCurrentTexture() ?? UIImage()
                 photoAtlas = equirectangular.drawCountriesToTexture(baseTexture)
-            } else if let existingTexture = currentTexture, newPhotos.count < 3 {
-                // 差分更新：新しい写真だけを既存テクスチャに追加
+            } else if let existingTexture = currentTexture,
+                      newPhotos.count < 3 && deletedCountries.isEmpty {
+                // 差分更新：新しい写真だけを既存テクスチャに追加（削除がない場合のみ）
                 print("🔄 Performing incremental update for \(newPhotos.count) photos...")
                 photoAtlas = await updateTextureIncrementally(
                     baseTexture: existingTexture,
@@ -230,8 +231,12 @@ struct GlobeView: UIViewRepresentable {
                     countries: countriesDict
                 )
             } else {
-                // 全体再生成：初回または多数の写真が追加された場合
-                print("🔄 Performing full texture regeneration...")
+                // 全体再生成：初回、多数の写真が追加された場合、または削除があった場合
+                if !deletedCountries.isEmpty {
+                    print("🔄 Performing full texture regeneration due to \(deletedCountries.count) deletion(s)...")
+                } else {
+                    print("🔄 Performing full texture regeneration...")
+                }
                 photoAtlas = await GlobeMaterial.createPhotoAtlas(
                     photos: photos,
                     countries: countriesDict

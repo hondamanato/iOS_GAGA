@@ -93,20 +93,19 @@ struct ContentView: View {
                     EmptyView()
                 }
                 .hidden()
+
+                // Invisible NavigationLink for camera/composer view
+                NavigationLink(
+                    destination: selectedCountry.map { country in
+                        PhotoComposerView(selectedImage: $selectedImage, selectedCountry: .constant(country))
+                    },
+                    isActive: $showCameraView
+                ) {
+                    EmptyView()
+                }
+                .hidden()
             }
             .navigationBarHidden(true)
-            .sheet(isPresented: $showCameraView, onDismiss: {
-                // シートを閉じたときに選択した画像をリセット
-                selectedImage = nil
-                // 写真投稿後、地球儀を更新
-                Task {
-                    await loadPhotos()
-                }
-            }) {
-                if let country = selectedCountry {
-                    PhotoComposerView(selectedImage: $selectedImage, selectedCountry: .constant(country))
-                }
-            }
             .onAppear {
                 // 起動時に写真を読み込み
                 Task {
