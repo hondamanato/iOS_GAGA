@@ -18,7 +18,29 @@ struct GlobeView: UIViewRepresentable {
         let sceneView = SCNView()
         let scene = SCNScene()
 
-        // 地球儀作成
+        // 宇宙背景球体を作成（巨大な球体の内側に星空を表示）
+        let starfieldSphere = SCNSphere(radius: 50.0)
+        starfieldSphere.segmentCount = 48
+
+        let starfieldMaterial = SCNMaterial()
+        if let starfield = UIImage(named: "starfield") ?? UIImage(named: "starfield.jpg") {
+            starfieldMaterial.diffuse.contents = starfield
+            starfieldMaterial.isDoubleSided = true // 内側も表示
+            starfieldMaterial.cullMode = .front // 外側をカリング（内側だけ表示）
+            starfieldMaterial.lightingModel = .constant // ライティングの影響を受けない
+            print("✅ Starfield sphere created successfully")
+        } else {
+            // フォールバック：黒い背景
+            starfieldMaterial.diffuse.contents = UIColor.black
+            print("❌ Failed to load starfield image for sphere")
+        }
+        starfieldSphere.materials = [starfieldMaterial]
+
+        let starfieldNode = SCNNode(geometry: starfieldSphere)
+        starfieldNode.name = "starfield"
+        scene.rootNode.addChildNode(starfieldNode)
+
+        // 地球儀作成（背景球体の子ノードとして追加）
         let globe = SCNSphere(radius: 1.0)
         globe.segmentCount = 96
 
@@ -32,7 +54,7 @@ struct GlobeView: UIViewRepresentable {
 
         let globeNode = SCNNode(geometry: globe)
         globeNode.name = "globe"
-        scene.rootNode.addChildNode(globeNode)
+        starfieldNode.addChildNode(globeNode) // 背景球体の子ノードとして追加
 
         // カメラ設定
         let camera = SCNCamera()
@@ -54,30 +76,22 @@ struct GlobeView: UIViewRepresentable {
         ambientLight.light!.color = UIColor(white: 0.3, alpha: 1.0)
         scene.rootNode.addChildNode(ambientLight)
 
-        // 星空背景を設定
-        if let starfield = UIImage(named: "starfield") {
-            print("✅ Starfield image loaded successfully")
-            scene.background.contents = starfield
-            scene.background.intensity = 0.6 // 明るさ調整（0.5〜1.0で調整可能）
-        } else {
-            print("❌ Failed to load starfield image")
-            print("📁 Checking alternative names...")
-            // 拡張子付きで試す
-            if let starfieldWithExt = UIImage(named: "starfield.jpg") {
-                print("✅ Starfield image loaded with .jpg extension")
-                scene.background.contents = starfieldWithExt
-                scene.background.intensity = 0.6
-            }
-        }
-
         sceneView.scene = scene
-        sceneView.allowsCameraControl = true
+        sceneView.allowsCameraControl = false // カスタム回転制御を使用
         sceneView.backgroundColor = UIColor.black
         sceneView.autoenablesDefaultLighting = false
 
         // タップジェスチャー追加
         let tapGesture = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
         sceneView.addGestureRecognizer(tapGesture)
+
+        // パンジェスチャー追加（カスタム回転制御）
+        let panGesture = UIPanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handlePan(_:)))
+        sceneView.addGestureRecognizer(panGesture)
+
+        // ピンチジェスチャー追加（ズーム）
+        let pinchGesture = UIPinchGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handlePinch(_:)))
+        sceneView.addGestureRecognizer(pinchGesture)
 
         context.coordinator.sceneView = sceneView
 
@@ -117,6 +131,10 @@ struct GlobeView: UIViewRepresentable {
         // タップ時に写真を検出するために保持
         private var photos: [String: Photo] = [:]
 
+        // カスタム回転制御用
+        private var lastPanLocation: CGPoint?
+        private var initialCameraDistance: Float = 3.0
+
         init(selectedCountry: Binding<Country?>, selectedPhoto: Binding<Photo?>, showPhotoDetail: Binding<Bool>, photos: [String: Photo]) {
             self._selectedCountry = selectedCountry
             self._selectedPhoto = selectedPhoto
@@ -132,13 +150,23 @@ struct GlobeView: UIViewRepresentable {
 
             if let hit = hitResults.first {
                 let hitPoint = hit.worldCoordinates
-                print("🎯 Tapped at 3D coordinates: (\(hitPoint.x), \(hitPoint.y), \(hitPoint.z))")
+                print("🎯 Tapped at world coordinates: (\(hitPoint.x), \(hitPoint.y), \(hitPoint.z))")
 
-                // CountryDetectorを使って国を特定
+                // 地球儀ノードを取得（背景球体の子ノードなのでrecursively: trueで検索）
+                guard let globeNode = sceneView.scene?.rootNode.childNode(withName: "globe", recursively: true) else {
+                    print("⚠️ Globe node not found for tap detection")
+                    return
+                }
+
+                // ワールド座標を地球儀のローカル座標系に変換（回転を考慮）
+                let localPoint = globeNode.convertPosition(hitPoint, from: nil) // nilはワールド座標系から変換
+                print("📍 Converted to local coordinates: (\(localPoint.x), \(localPoint.y), \(localPoint.z))")
+
+                // CountryDetectorを使って国を特定（ローカル座標を渡す）
                 let country = CountryDetector.shared.detectCountryFromVector(
-                    x: hitPoint.x,
-                    y: hitPoint.y,
-                    z: hitPoint.z
+                    x: localPoint.x,
+                    y: localPoint.y,
+                    z: localPoint.z
                 )
 
                 if let country = country {
@@ -157,6 +185,82 @@ struct GlobeView: UIViewRepresentable {
                     print("🌊 Tapped on ocean or unrecognized area")
                     selectedCountry = nil
                 }
+            }
+        }
+
+        @objc func handlePan(_ gesture: UIPanGestureRecognizer) {
+            guard let sceneView = sceneView,
+                  let scene = sceneView.scene,
+                  let starfieldNode = scene.rootNode.childNode(withName: "starfield", recursively: false) else {
+                return
+            }
+
+            let location = gesture.location(in: sceneView)
+
+            switch gesture.state {
+            case .began:
+                lastPanLocation = location
+
+            case .changed:
+                guard let lastLocation = lastPanLocation else { return }
+
+                // 移動量を計算
+                let deltaX = Float(location.x - lastLocation.x)
+                let deltaY = Float(location.y - lastLocation.y)
+
+                // 感度調整
+                let sensitivity: Float = 0.005
+
+                // Y軸回転（横方向のパン）
+                let rotationY = simd_quatf(angle: deltaX * sensitivity, axis: simd_float3(0, 1, 0))
+
+                // X軸回転（縦方向のパン）- カメラの現在の右方向を基準に
+                let cameraNode = scene.rootNode.childNodes.first { $0.camera != nil }
+                let rightVector = cameraNode?.simdWorldRight ?? simd_float3(1, 0, 0)
+                let rotationX = simd_quatf(angle: deltaY * sensitivity, axis: rightVector)
+
+                // クォータニオンを合成して背景球体（親ノード）に適用
+                // これにより地球儀と背景が一緒に回転する
+                let combinedRotation = rotationY * rotationX
+                starfieldNode.simdOrientation = combinedRotation * starfieldNode.simdOrientation
+
+                lastPanLocation = location
+
+            case .ended, .cancelled:
+                lastPanLocation = nil
+
+            default:
+                break
+            }
+        }
+
+        @objc func handlePinch(_ gesture: UIPinchGestureRecognizer) {
+            guard let sceneView = sceneView,
+                  let scene = sceneView.scene,
+                  let cameraNode = scene.rootNode.childNodes.first(where: { $0.camera != nil }) else {
+                return
+            }
+
+            switch gesture.state {
+            case .began:
+                initialCameraDistance = cameraNode.position.z
+
+            case .changed:
+                // ピンチの拡大縮小率を計算
+                let scale = Float(gesture.scale)
+                let newDistance = initialCameraDistance / scale
+
+                // ズーム範囲を制限（1.5〜10.0）
+                let clampedDistance = max(1.5, min(10.0, newDistance))
+
+                cameraNode.position.z = clampedDistance
+
+            case .ended, .cancelled:
+                // 現在の距離を保存
+                initialCameraDistance = cameraNode.position.z
+
+            default:
+                break
             }
         }
 
@@ -250,8 +354,8 @@ struct GlobeView: UIViewRepresentable {
 
             print("✅ Photo atlas created, applying to globe...")
 
-            // 球体のマテリアルを更新
-            if let globeNode = scene.rootNode.childNode(withName: "globe", recursively: false),
+            // 球体のマテリアルを更新（地球儀は背景球体の子ノードなのでrecursively: trueで検索）
+            if let globeNode = scene.rootNode.childNode(withName: "globe", recursively: true),
                let sphere = globeNode.geometry as? SCNSphere {
 
                 // 新しいマテリアルを作成
@@ -315,8 +419,14 @@ struct GlobeView: UIViewRepresentable {
         func updateHighlight(for country: Country?, in scene: SCNScene?) {
             guard let scene = scene else { return }
 
-            // 既存のハイライトを削除
-            scene.rootNode.childNodes.filter { $0.name?.starts(with: "highlight_") == true }.forEach { $0.removeFromParentNode() }
+            // 地球儀ノードを取得（背景球体の子ノードなのでrecursively: trueで検索）
+            guard let globeNode = scene.rootNode.childNode(withName: "globe", recursively: true) else {
+                print("⚠️ Globe node not found for highlight update")
+                return
+            }
+
+            // 既存のハイライトを削除（globeNodeの子ノードから削除）
+            globeNode.childNodes.filter { $0.name?.starts(with: "highlight_") == true }.forEach { $0.removeFromParentNode() }
 
             // 新しい国が選択されている場合、ハイライトを追加
             guard let country = country, let geometry = country.geometry else { return }
@@ -331,8 +441,8 @@ struct GlobeView: UIViewRepresentable {
                     let lon = point[0]
                     let lat = point[1]
 
-                    // 緯度経度を3D座標に変換（地表と同じ位置）
-                    let vector = latLonToVector3(lat: lat, lon: lon, radius: 1.0)
+                    // 緯度経度を3D座標に変換（地表より少し外側に配置してはっきり見えるように）
+                    let vector = latLonToVector3(lat: lat, lon: lon, radius: 1.002)
                     vertices.append(vector)
                 }
 
@@ -365,7 +475,7 @@ struct GlobeView: UIViewRepresentable {
                     let lineNode = SCNNode(geometry: lineGeometry)
                     lineNode.name = "highlight_\(country.id)"
                     lineNode.renderingOrder = 10 // 地球のテクスチャより後に描画
-                    scene.rootNode.addChildNode(lineNode)
+                    globeNode.addChildNode(lineNode) // 地球儀ノードの子として追加（地球と一緒に回転）
                 }
             }
 
