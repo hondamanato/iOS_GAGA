@@ -154,24 +154,39 @@ struct ContentView: View {
 
 // メインのタブビュー
 struct MainTabView: View {
+    @State private var selectedTab = 0
+    @StateObject private var authManager = AuthManager.shared
+
     var body: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             ContentView()
                 .tabItem {
                     Label("地球儀", systemImage: "globe")
                 }
+                .tag(0)
 
             UserSearchView()
                 .tabItem {
                     Label("探す", systemImage: "magnifyingglass")
                 }
+                .tag(1)
 
             ProfileView()
                 .tabItem {
                     Label("プロフィール", systemImage: "person.fill")
                 }
+                .tag(2)
         }
         .tint(.black)
+        .onChange(of: selectedTab) { newTab in
+            // タブが切り替わったときにプロフィールタブの写真をプリロード
+            if newTab == 2, let userId = authManager.currentUser?.id {
+                Task {
+                    await AppStateManager.shared.loadUserPhotos(userId: userId, forceRefresh: false)
+                    print("🔄 Preloaded photos for profile tab")
+                }
+            }
+        }
         .onAppear {
             // タブバーの背景スタイルを統一（半透明のぼかし効果）
             let appearance = UITabBarAppearance()
@@ -179,6 +194,12 @@ struct MainTabView: View {
 
             UITabBar.appearance().standardAppearance = appearance
             UITabBar.appearance().scrollEdgeAppearance = appearance
+
+            // アプリ起動時にバックグラウンドでプロフィール写真をプリロード
+            if let userId = authManager.currentUser?.id {
+                AppStateManager.shared.preloadUserPhotos(userId: userId)
+                print("🚀 Background preload started for user \(userId)")
+            }
         }
     }
 }

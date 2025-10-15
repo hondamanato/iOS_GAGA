@@ -9,6 +9,7 @@ import SwiftUI
 
 struct ProfileView: View {
     @StateObject private var authManager = AuthManager.shared
+    @StateObject private var appState = AppStateManager.shared
     @State private var refreshID = UUID()
     @State private var globeRefreshTrigger = false
 
@@ -69,7 +70,7 @@ struct ProfileView: View {
                             HStack(spacing: 40) {
                                 // 訪問国数（タップ不可、スクロールで移動）
                                 VStack {
-                                    Text("\(user.visitedCountries.count)")
+                                    Text("\(appState.userPhotos.count)")
                                         .font(.title2)
                                         .fontWeight(.bold)
                                     Text("訪問国")
@@ -133,15 +134,15 @@ struct ProfileView: View {
                                 .font(.headline)
                                 .padding(.horizontal)
 
-                            if user.visitedCountries.isEmpty {
+                            if appState.userPhotos.isEmpty {
                                 Text("まだ訪問した国がありません")
                                     .foregroundColor(.secondary)
                                     .padding()
                             } else {
-                                // 訪問国を横スクロールで表示
+                                // 訪問国を横スクロールで表示（実際に投稿がある国のみ）
                                 ScrollView(.horizontal, showsIndicators: false) {
                                     HStack(spacing: 20) {
-                                        ForEach(getVisitedCountries(user.visitedCountries)) { country in
+                                        ForEach(getVisitedCountriesFromPhotos()) { country in
                                             VStack(spacing: 8) {
                                                 Text(country.flag)
                                                     .font(.system(size: 50))
@@ -169,12 +170,8 @@ struct ProfileView: View {
                     }
                 }
             }
-            .task {
-                // プロフィール表示時にユーザー情報を再読み込み
-                await refreshUserData()
-            }
             .refreshable {
-                // プルして更新
+                // プルして更新（手動でのみリフレッシュ）
                 await refreshUserData()
             }
         }
@@ -184,7 +181,13 @@ struct ProfileView: View {
         guard let userId = authManager.currentUser?.id else { return }
 
         do {
-            let user = try await FirebaseService.shared.getUser(userId: userId)
+            // ユーザー情報と写真データを並行して取得
+            async let userTask = FirebaseService.shared.getUser(userId: userId)
+            async let photosTask = AppStateManager.shared.refreshUserPhotos(userId: userId)
+
+            let user = try await userTask
+            await photosTask
+
             await MainActor.run {
                 authManager.currentUser = user
                 refreshID = UUID() // UserGlobeViewを強制的に再読み込み
@@ -199,6 +202,18 @@ struct ProfileView: View {
     private func getVisitedCountries(_ countryCodes: [String]) -> [Country] {
         let allCountries = GeoDataManager.shared.getAllCountries()
         let countryDict = Dictionary(uniqueKeysWithValues: allCountries.map { ($0.id, $0) })
+
+        return countryCodes.compactMap { countryDict[$0] }
+            .sorted { ($0.nameJa ?? $0.name) < ($1.nameJa ?? $1.name) } // 名前順にソート
+    }
+
+    /// AppStateManagerの写真データから実際に投稿がある国のリストを取得
+    private func getVisitedCountriesFromPhotos() -> [Country] {
+        let allCountries = GeoDataManager.shared.getAllCountries()
+        let countryDict = Dictionary(uniqueKeysWithValues: allCountries.map { ($0.id, $0) })
+
+        // AppStateManagerから国コードを取得
+        let countryCodes = Array(appState.userPhotos.keys)
 
         return countryCodes.compactMap { countryDict[$0] }
             .sorted { ($0.nameJa ?? $0.name) < ($1.nameJa ?? $1.name) } // 名前順にソート
