@@ -14,6 +14,7 @@ struct ContentView: View {
     @State private var showCameraView = false
     @State private var selectedImage: UIImage?
     @State private var photos: [String: Photo] = [:]
+    @State private var showNotifications = false
 
     var body: some View {
         NavigationView {
@@ -41,7 +42,9 @@ struct ContentView: View {
 
                         // 右上：通知アイコン
                         Button(action: {
-                            // TODO: 通知画面を開く
+                            withAnimation(.spring(response: 0.4, dampingFraction: 1.0)) {
+                                showNotifications = true
+                            }
                         }) {
                             Image(systemName: "bell")
                                 .font(.title2)
@@ -105,6 +108,13 @@ struct ContentView: View {
                     EmptyView()
                 }
                 .hidden()
+
+                // 通知画面
+                if showNotifications {
+                    NotificationListView(isPresented: $showNotifications)
+                        .transition(.move(edge: .trailing))
+                        .zIndex(1)
+                }
             }
             .navigationBarHidden(true)
             .toolbar(.visible, for: .tabBar) // タブバーを明示的に表示

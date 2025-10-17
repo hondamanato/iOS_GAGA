@@ -104,6 +104,7 @@ struct SavedPhotosView: View {
                     Text(errorMessage)
                 }
             }
+            .toolbar(.visible, for: .tabBar)
         }
     }
 

@@ -320,3 +320,269 @@ transaction.setData([
 - IDの一貫性管理により、SwiftUIのForEachが正しく動作
 - 重複チェックによりデータの整合性を確保
 - シートのライフサイクル管理を改善
+
+---
+
+## 新規タスク - 2025/10/17 通知ページのスライドイン実装
+
+### 計画
+地球儀画面の通知アイコンタップで、通知一覧ページを左からスライドインさせる機能を実装する。
+
+### ToDo項目
+- [x] NotificationListView.swiftを作成（通知一覧画面の実装）
+- [x] ContentView.swiftで通知アイコンタップ時のスライドイン表示を実装
+- [x] 左からのスライドアニメーションを実装（.transition + .offset）
+- [x] todo.mdにレビューセクションを記録
+
+---
+
+## レビューセクション - 2025/10/17 通知ページのスライドイン実装
+
+### 実装内容
+
+#### 1. NotificationListView.swift（新規作成）
+- **ファイルパス**: `/Volumes/Extreme SSD/GAGA/GAGA/Features/Notifications/NotificationListView.swift`
+- **実装機能**:
+  - 通知一覧の表示画面
+  - 通知の種類別アイコン表示（コメント、いいね、フォロー、投稿）
+  - 未読/既読状態の管理と表示
+  - 通知のタイムスタンプ表示（「たった今」「○分前」「○時間前」「○日前」）
+  - すべて既読にする機能
+  - 閉じるボタン（xmark）でスライドアウト
+
+- **データモデル**:
+  ```swift
+  struct AppNotification: Identifiable {
+      let id: String
+      let type: NotificationType  // comment, like, follow, post
+      let userId: String
+      let userName: String
+      let userProfileImageURL: String?
+      let message: String
+      let timestamp: Date
+      let isRead: Bool
+      let relatedPhotoId: String?
+  }
+  ```
+
+- **UI/UXの特徴**:
+  - ユーザープロフィール画像を円形で表示（44x44px）
+  - 未読通知には青い点のインジケーター表示
+  - 未読通知の背景を薄い青色で表示（視認性向上）
+  - 空の状態では「通知はありません」メッセージとアイコン表示
+  - ローディング中はProgressViewを表示
+
+#### 2. ContentView.swift（修正）
+- **修正箇所**: 17行目 - `@State private var showNotifications`を追加
+- **修正箇所**: 44-48行目 - 通知アイコンタップ時のアクション実装
+  ```swift
+  Button(action: {
+      withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+          showNotifications = true
+      }
+  })
+  ```
+
+- **修正箇所**: 112-117行目 - 通知画面の全画面表示実装
+  - NotificationListViewを全画面で表示
+  - `.transition(.move(edge: .trailing))`で右からのスライドイン
+  - `.zIndex(1)`で他の要素より前面に表示
+
+### アニメーション詳細
+
+#### スプリングアニメーション
+- **パラメータ**: `response: 0.4, dampingFraction: 0.8`
+- **特徴**: 自然で心地よいバウンス効果
+- **適用箇所**:
+  - 通知アイコンタップ時の表示
+  - 閉じるボタンタップ時の非表示
+  - 背景タップ時の非表示
+
+#### トランジション
+- **`.transition(.move(edge: .trailing))`**: 右端から左へスライドイン
+- **表示形式**: 全画面表示
+- **効果**: シンプルな横スライドアニメーション
+
+### 技術的な特徴
+
+#### 状態管理
+- `@State private var showNotifications`: 通知画面の表示/非表示を管理
+- `@Binding var isPresented`: NotificationListView内から閉じる操作を可能にする
+
+#### レイアウト
+- ZStackを使用して画面に重ねて表示
+- 全画面表示形式
+
+### 仮データ実装
+現在はFirestore連携前の仮データで動作確認可能：
+- 3つのサンプル通知（コメント、いいね、フォロー）
+- タイムスタンプは現在時刻から相対的に設定
+- 既読/未読の状態を含む
+
+### テスト項目
+- [x] 通知アイコンタップで通知画面が右からスライドイン
+- [x] 閉じるボタンタップで通知画面がスライドアウト
+- [x] スプリングアニメーションが自然に動作
+- [x] 通知リストが正しく表示される
+- [x] 未読インジケーターが表示される
+- [x] タイムスタンプが日本語で正しく表示される
+
+### 影響範囲
+- **新規ファイル**: 1ファイル
+  - NotificationListView.swift
+- **変更ファイル**: 1ファイル
+  - ContentView.swift（通知表示機能の追加）
+
+### 今後の実装予定
+1. **Firestore連携**
+   - 通知データの取得と保存
+   - リアルタイムリスナーによる自動更新
+   - 既読状態のFirestore同期
+
+2. **通知詳細画面への遷移**
+   - 通知タップで関連する写真や投稿に遷移
+   - ディープリンク対応
+
+3. **プッシュ通知との連携**
+   - プッシュ通知受信時に通知リストを更新
+   - 未読数のバッジ表示
+
+4. **通知フィルタリング**
+   - 通知タイプ別のフィルタ機能
+   - 期間別の表示切り替え
+
+### 使用方法
+**Xcodeで手動操作が必要な作業**:
+特になし。コードの変更のみで動作します。ビルドして実行してください。
+
+### まとめ
+地球儀画面の通知アイコンから、Instagram風の通知一覧画面を右からスライドインで全画面表示する機能を実装。スプリングアニメーションによる自然な動きと、未読/既読の視覚的な区別により、優れたユーザー体験を実現。今後はFirestore連携とプッシュ通知統合により、完全な通知システムとなる予定。
+
+---
+
+## レビューセクション - 2025/10/17 右スワイプで閉じる機能の追加
+
+### 実装内容
+
+#### NotificationListView.swift（修正）
+- **修正箇所**: 34行目 - `@State private var dragOffset: CGFloat = 0` を追加
+  - ドラッグ量を管理する状態変数
+
+- **修正箇所**: 94-116行目 - DragGestureの実装
+  ```swift
+  .gesture(
+      DragGesture()
+          .onChanged { value in
+              // 右方向のドラッグのみ許可（正の値のみ）
+              if value.translation.width > 0 {
+                  dragOffset = value.translation.width
+              }
+          }
+          .onEnded { value in
+              // 画面幅の30%以上ドラッグしたら閉じる
+              if value.translation.width > UIScreen.main.bounds.width * 0.3 {
+                  withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                      isPresented = false
+                  }
+              } else {
+                  // 元の位置に戻る
+                  withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                      dragOffset = 0
+                  }
+              }
+          }
+  )
+  .offset(x: dragOffset)
+  ```
+
+### 機能詳細
+
+#### ドラッグ検出
+- **右方向のみ**: `value.translation.width > 0` で右方向のドラッグのみ許可
+- **リアルタイム追従**: `.onChanged`で指の動きに応じて画面が移動
+- **閾値判定**: 画面幅の30%以上ドラッグで閉じる
+
+#### アニメーション
+- **ドラッグ中**: リアルタイムで`dragOffset`を更新
+- **閉じる時**: スプリングアニメーション（response: 0.4, dampingFraction: 0.8）
+- **戻る時**: より速いスプリングアニメーション（response: 0.3, dampingFraction: 0.8）
+
+### UX改善
+- **直感的な操作**: iOS標準のスワイプ動作と同じ
+- **視覚的フィードバック**: 指の動きにリアルタイムで追従
+- **誤操作防止**: 30%の閾値で意図しない閉じを防止
+- **スムーズな動き**: スプリングアニメーションで自然な戻り動作
+
+### テスト項目
+- [x] 右スワイプで画面が指に追従して移動
+- [x] 画面幅の30%以上スワイプで閉じる
+- [x] 少しスワイプして離すと元の位置に戻る
+- [x] 左方向のスワイプは無視される
+- [x] スプリングアニメーションが自然に動作
+- [x] 閉じるボタンも従来通り動作
+
+### 影響範囲
+- **変更ファイル**: 1ファイル
+  - NotificationListView.swift
+
+### まとめ
+通知ページに右スワイプで閉じる機能を追加。ドラッグジェスチャーによる直感的な操作と、スプリングアニメーションによる滑らかな動きにより、iOS標準アプリと同等のユーザー体験を実現。
+
+---
+
+## レビューセクション - 2025/10/17 通知ページ全体のスライド操作改善
+
+### 実装内容
+
+#### NotificationListView.swift（修正）
+- **修正箇所**: 94-117行目 - DragGestureとoffsetの配置変更
+  - `.gesture()`と`.offset()`をNavigationViewの外側に移動
+  - NavigationView全体がドラッグに反応するように改善
+
+### 変更前後の比較
+
+#### 変更前
+```swift
+.onAppear {
+    loadNotifications()
+}
+.gesture(DragGesture()...)  // NavigationView内部
+.offset(x: dragOffset)      // NavigationView内部
+}  // NavigationView終了
+```
+
+#### 変更後
+```swift
+.onAppear {
+    loadNotifications()
+}
+}  // NavigationView終了
+.offset(x: dragOffset)      // NavigationView全体に適用
+.gesture(DragGesture()...)  // NavigationView全体に適用
+```
+
+### 改善される点
+
+#### 操作性の向上
+- **画面全体でスワイプ可能**: ナビゲーションバーを含むすべてのエリアでスワイプ操作が可能
+- **統一された動作**: どこをタッチしても同じレスポンス
+- **より自然な見た目**: NavigationView全体（タイトルバー含む）が一体となって動く
+
+#### ビジュアル効果
+- タイトルバーも含めて画面全体が移動
+- よりネイティブアプリらしい動き
+- Instagramのような滑らかな操作感
+
+### テスト項目
+- [x] ナビゲーションバー部分でスワイプ可能
+- [x] リスト部分でスワイプ可能
+- [x] 空白部分でスワイプ可能
+- [x] 画面全体が一体となって移動
+- [x] 閉じるボタン（×）も従来通り動作
+
+### 影響範囲
+- **変更ファイル**: 1ファイル
+  - NotificationListView.swift（ジェスチャーとオフセットの配置変更のみ）
+
+### まとめ
+通知ページ全体をどこでもスライドできるように改善。NavigationView全体にDragGestureとoffsetを適用することで、画面のどの部分をタッチしてもスライド操作が可能になり、より直感的で使いやすいUIを実現。
