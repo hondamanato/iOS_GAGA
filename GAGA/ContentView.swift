@@ -30,21 +30,22 @@ struct ContentView: View {
                 // 上部オーバーレイ
                 VStack {
                     HStack {
+                        // 左上：アプリ名
+                        Text("GAGA")
+                            .font(.title)
+                            .fontWeight(.bold)
+                            .foregroundColor(.white)
+                            .padding()
+
                         Spacer()
 
-                        // カメラボタン
+                        // 右上：通知アイコン
                         Button(action: {
-                            if selectedCountry != nil {
-                                showCameraView = true
-                            }
+                            // TODO: 通知画面を開く
                         }) {
-                            Image(systemName: "camera.fill")
+                            Image(systemName: "bell")
                                 .font(.title2)
-                                .foregroundColor(.black)
-                                .padding()
-                                .background(Color.white)
-                                .clipShape(Circle())
-                                .shadow(radius: 5)
+                                .foregroundColor(.white)
                         }
                         .padding()
                     }
@@ -204,6 +205,25 @@ struct MainTabView: View {
             if let userId = authManager.currentUser?.id {
                 AppStateManager.shared.preloadUserPhotos(userId: userId)
                 print("🚀 Background preload started for user \(userId)")
+            }
+
+            // アプリ起動時にプッシュ通知権限をリクエスト
+            requestNotificationPermission()
+        }
+    }
+
+    // プッシュ通知の権限をリクエスト
+    private func requestNotificationPermission() {
+        Task {
+            do {
+                let granted = try await NotificationService.shared.requestAuthorization()
+                if granted {
+                    print("✅ Push notification permission granted")
+                } else {
+                    print("⚠️ Push notification permission denied")
+                }
+            } catch {
+                print("❌ Failed to request notification permission: \(error)")
             }
         }
     }

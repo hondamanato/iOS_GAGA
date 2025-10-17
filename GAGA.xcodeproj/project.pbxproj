@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		593BE2D42EA2493100BF09A2 /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 593BE2D32EA2493100BF09A2 /* FirebaseMessaging */; };
 		59A0814F2E97B55C0089187E /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 59A0814E2E97B55B0089187E /* GoogleService-Info.plist */; };
 		59A081522E97C1CC0089187E /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 59A081512E97C1CC0089187E /* FirebaseAuth */; };
 		59A081542E97C1CC0089187E /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 59A081532E97C1CC0089187E /* FirebaseFirestore */; };
@@ -37,9 +38,22 @@
 		59A0814E2E97B55B0089187E /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		593BE2D12EA247FC00BF09A2 /* Exceptions for "GAGA" folder in "GAGA" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 59A080E52E97A82E0089187E /* GAGA */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		59A080E82E97A82E0089187E /* GAGA */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				593BE2D12EA247FC00BF09A2 /* Exceptions for "GAGA" folder in "GAGA" target */,
+			);
 			path = GAGA;
 			sourceTree = "<group>";
 		};
@@ -60,6 +74,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				593BE2D42EA2493100BF09A2 /* FirebaseMessaging in Frameworks */,
 				59A081522E97C1CC0089187E /* FirebaseAuth in Frameworks */,
 				59A081542E97C1CC0089187E /* FirebaseFirestore in Frameworks */,
 				59A081562E97C1CC0089187E /* FirebaseStorage in Frameworks */,
@@ -83,6 +98,13 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		593BE2D22EA2493100BF09A2 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		59A080DD2E97A82E0089187E = {
 			isa = PBXGroup;
 			children = (
@@ -90,6 +112,7 @@
 				59A080E82E97A82E0089187E /* GAGA */,
 				59A080F62E97A8310089187E /* GAGATests */,
 				59A081002E97A8310089187E /* GAGAUITests */,
+				593BE2D22EA2493100BF09A2 /* Frameworks */,
 				59A080E72E97A82E0089187E /* Products */,
 			);
 			sourceTree = "<group>";
@@ -127,6 +150,7 @@
 				59A081512E97C1CC0089187E /* FirebaseAuth */,
 				59A081532E97C1CC0089187E /* FirebaseFirestore */,
 				59A081552E97C1CC0089187E /* FirebaseStorage */,
+				593BE2D32EA2493100BF09A2 /* FirebaseMessaging */,
 			);
 			productName = GAGA;
 			productReference = 59A080E62E97A82E0089187E /* GAGA.app */;
@@ -414,11 +438,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = GAGA/GAGADebug.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = LKD5YP2DRM;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = GAGA/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -447,6 +473,7 @@
 				DEVELOPMENT_TEAM = LKD5YP2DRM;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = GAGA/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -590,6 +617,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		593BE2D32EA2493100BF09A2 /* FirebaseMessaging */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 59A081502E97C1CC0089187E /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseMessaging;
+		};
 		59A081512E97C1CC0089187E /* FirebaseAuth */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 59A081502E97C1CC0089187E /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;

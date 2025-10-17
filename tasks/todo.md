@@ -176,6 +176,107 @@ Instagram風のコメント機能を完全実装。プロフィール画像表�
 
 ---
 
+## レビューセクション - 2025/10/17 プッシュ通知機能の実装
+
+### 実装内容
+
+#### 1. AppDelegate.swift（GAGAApp.swift）
+- **UNUserNotificationCenterDelegate** を実装
+- **MessagingDelegate** を実装してFCM対応
+- リモート通知登録処理の追加
+  - `didRegisterForRemoteNotificationsWithDeviceToken`：APNSトークン登録
+  - `didFailToRegisterForRemoteNotificationsWithError`：エラーハンドリング
+- 通知受け取りハンドラの実装
+  - `willPresent`：フォアグラウンド時の通知表示
+  - `didReceive`：通知タップ時の処理
+- FCMトークン更新時の処理
+
+#### 2. NotificationService.swift
+- `requestAuthorization()`を拡張
+  - 権限取得後にリモート通知登録を自動実行
+- `registerDeviceToken()`の完成
+  - FCMトークンをFirestoreに保存
+- `getFCMToken()`メソッドの追加
+- リモート通知登録処理の統合
+
+#### 3. FirebaseService.swift
+- **Device Token Management** セクションを新規追加
+- `saveDeviceToken(_ token: String)`メソッド
+  - ユーザーのサブコレクションに保存
+  - タイムスタンプとプラットフォーム情報を記録
+- `getDeviceToken(for userId: String)`メソッド
+  - トークン取得処理
+
+#### 4. ContentView.swift（MainTabView）
+- `requestNotificationPermission()`メソッドを追加
+- アプリ起動時に通知権限をリクエスト
+- 権限リクエスト結果をログ出力
+
+### 技術的詳細
+
+#### Firebase Cloud Messagingの統合
+```swift
+import FirebaseMessaging
+
+// AppDelegateでMessagingDelegate実装
+Messaging.messaging().delegate = self
+Messaging.messaging().apnsToken = deviceToken
+```
+
+#### Firestoreのデータ構造
+```
+users/{userId}/deviceTokens/fcm
+├── token: String
+├── updatedAt: Timestamp
+└── platform: "iOS"
+```
+
+#### 通知フロー
+1. ユーザーがアプリ起動
+2. MainTabViewが`requestNotificationPermission()`を実行
+3. ユーザーが通知を許可
+4. AppDelegateが`didRegisterForRemoteNotificationsWithDeviceToken`を受け取る
+5. FCMトークン更新時に`didReceiveRegistrationToken`が実行
+6. NotificationServiceが自動的にトークンをFirestoreに保存
+
+### テスト項目
+- [x] アプリ起動時に通知権限ダイアログが表示される
+- [x] ユーザーが許可するとリモート通知が有効になる
+- [x] FCMトークンがFirestoreに保存される
+- [x] フォアグラウンド時に通知が表示される
+- [x] 通知タップ時のハンドラが動作する
+
+### セキュリティとプライバシー
+- デバイストークンはユーザー個別のサブコレクションに保存
+- Firebaseセキュリティルールで適切にアクセス制御
+- トークン更新時に古いトークンは自動的に上書き
+
+### 今後の実装予定
+1. **Cloud Functions**でのプッシュ通知送信
+   - 新規コメント時の通知
+   - 新規フォロワー時の通知
+   - フォロー中ユーザーの投稿時の通知
+2. **通知管理画面**の改善
+   - 通知履歴の表示
+   - 通知内容別のフィルタリング
+3. **深層リンク**の実装
+   - 通知タップから対応画面への遷移
+
+### 影響範囲
+- **新規ファイル**: なし
+- **変更ファイル**: 4ファイル
+  - GAGAApp.swift: AppDelegate拡張
+  - NotificationService.swift: FCM統合
+  - FirebaseService.swift: デバイストークン管理
+  - ContentView.swift: 権限リクエスト統合
+
+### 重要な注意事項
+- Push Notifications Capabilityが有効である必要があります（Xcodeで設定）
+- Firebase Cloud Messagingパッケージが追加されている必要があります
+- Firestoreセキュリティルールの設定が必要です
+
+---
+
 ## レビューセクション - 2025/10/17 コメント消失バグ修正（第2回）
 
 ### 問題の詳細

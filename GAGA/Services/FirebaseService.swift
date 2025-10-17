@@ -560,4 +560,47 @@ class FirebaseService {
             throw error
         }
     }
+
+    // MARK: - Device Token Management
+
+    // FCMトークンを保存
+    func saveDeviceToken(_ token: String) async {
+        guard let userId = await AuthManager.shared.currentUser?.id else {
+            print("⚠️ No authenticated user, cannot save device token")
+            return
+        }
+
+        do {
+            try await db.collection("users")
+                .document(userId)
+                .collection("deviceTokens")
+                .document("fcm")
+                .setData([
+                    "token": token,
+                    "updatedAt": FieldValue.serverTimestamp(),
+                    "platform": "iOS"
+                ])
+
+            print("✅ Device token saved for user \(userId)")
+        } catch {
+            print("❌ Failed to save device token: \(error)")
+        }
+    }
+
+    // ユーザーのFCMトークンを取得
+    func getDeviceToken(for userId: String) async throws -> String? {
+        do {
+            let document = try await db.collection("users")
+                .document(userId)
+                .collection("deviceTokens")
+                .document("fcm")
+                .getDocument()
+
+            let token = document.data()?["token"] as? String
+            return token
+        } catch {
+            print("❌ Failed to get device token: \(error)")
+            throw error
+        }
+    }
 }

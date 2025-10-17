@@ -6,7 +6,9 @@
 //
 
 import Foundation
+import UIKit
 import UserNotifications
+import FirebaseMessaging
 
 class NotificationService {
     static let shared = NotificationService()
@@ -17,16 +19,28 @@ class NotificationService {
     func requestAuthorization() async throws -> Bool {
         let center = UNUserNotificationCenter.current()
         let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
+
+        // 権限が取得できたら、リモート通知登録
+        if granted {
+            await MainActor.run {
+                UIApplication.shared.registerForRemoteNotifications()
+            }
+        }
+
         return granted
     }
 
-    // デバイストークンを登録
-    func registerDeviceToken(_ token: Data) async throws {
-        let tokenString = token.map { String(format: "%02.2hhx", $0) }.joined()
+    // FCMトークンを登録（AppDelegate経由で呼ばれる）
+    func registerDeviceToken(_ token: String) async {
+        // Firestoreにデバイストークンを保存
+        await FirebaseService.shared.saveDeviceToken(token)
+        print("Device token registered: \(token)")
+    }
 
-        // TODO: Firestoreにデバイストークンを保存
-        // TODO: Firebase Cloud Messagingに登録
-        print("Device token: \(tokenString)")
+    // 現在のFCMトークンを取得
+    func getFCMToken() async -> String? {
+        let token = Messaging.messaging().fcmToken
+        return token
     }
 
     // ローカル通知を送信
@@ -48,6 +62,8 @@ class NotificationService {
 
     // プッシュ通知を送信（サーバー側で実装）
     func sendPushNotification(to userId: String, title: String, body: String) async throws {
-        // TODO: Cloud Functionsでプッシュ通知を送信
+        // NOTE: Cloud Functionsでプッシュ通知を送信
+        // Cloud FunctionがFirestoreで対象ユーザーのトークンを取得して
+        // Firebase Admin SDKのメッセージング機能を使用して通知を送信
     }
 }
