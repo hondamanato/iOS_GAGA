@@ -367,4 +367,197 @@ class FirebaseService {
 
         return blocker.blockedUserIds.contains(blockedId)
     }
+
+    // MARK: - Comment Operations
+
+    // 写真のコメント一覧を取得
+    func getComments(for photoId: String) async throws -> [Comment] {
+        do {
+            let snapshot = try await db.collection("photos")
+                .document(photoId)
+                .collection("comments")
+                .order(by: "createdAt", descending: true)  // 新しい順に変更
+                .getDocuments()
+
+            return try snapshot.documents.compactMap { doc in
+                do {
+                    var comment = try doc.data(as: Comment.self)
+                    // FirestoreのドキュメントIDを使用
+                    comment.id = doc.documentID
+
+                    // createdAt が nil の場合、現在時刻を使用
+                    if comment.createdAt == nil {
+                        comment = Comment(
+                            id: comment.id,
+                            photoId: comment.photoId,
+                            userId: comment.userId,
+                            username: comment.username,
+                            text: comment.text,
+                            createdAt: Date()
+                        )
+                    }
+
+                    return comment
+                } catch {
+                    print("⚠️ Failed to decode comment document \(doc.documentID): \(error)")
+                    // デコード失敗時は nil を返してスキップ
+                    return nil
+                }
+            }
+        } catch {
+            print("❌ Failed to fetch comments from Firestore: \(error)")
+            throw error
+        }
+    }
+
+    // コメントを投稿
+    func postComment(photoId: String, userId: String, username: String, text: String) async throws -> Comment {
+        let photoRef = db.collection("photos").document(photoId)
+        let commentRef = photoRef.collection("comments").document()
+
+        // コメントデータを作成
+        let comment = Comment(
+            id: commentRef.documentID,
+            photoId: photoId,
+            userId: userId,
+            username: username,
+            text: text,
+            createdAt: Date()
+        )
+
+        // トランザクションでコメント追加とカウント更新を同時実行
+        try await db.runTransaction({ (transaction, errorPointer) -> Any? in
+            let photoDocument: DocumentSnapshot
+            do {
+                try photoDocument = transaction.getDocument(photoRef)
+            } catch let fetchError as NSError {
+                errorPointer?.pointee = fetchError
+                return nil
+            }
+
+            guard let currentCommentCount = photoDocument.data()?["commentCount"] as? Int else {
+                let error = NSError(domain: "AppErrorDomain", code: -1, userInfo: [
+                    NSLocalizedDescriptionKey: "Unable to retrieve comment count"
+                ])
+                errorPointer?.pointee = error
+                return nil
+            }
+
+            // コメント数を増やす
+            transaction.updateData(["commentCount": currentCommentCount + 1], forDocument: photoRef)
+
+            // コメントを追加（IDフィールドも含めて保存）
+            transaction.setData([
+                "id": comment.id,  // IDフィールドを追加
+                "photoId": comment.photoId,
+                "userId": comment.userId,
+                "username": comment.username,
+                "text": comment.text,
+                "createdAt": Timestamp(date: comment.createdAt ?? Date())
+            ], forDocument: commentRef)
+
+            return nil
+        })
+
+        print("✅ Comment posted: \(commentRef.documentID)")
+        return comment
+    }
+
+    // コメントを削除（オーナーまたは写真の投稿者のみ）
+    func deleteComment(commentId: String, photoId: String) async throws {
+        let photoRef = db.collection("photos").document(photoId)
+        let commentRef = photoRef.collection("comments").document(commentId)
+
+        // トランザクションでコメント削除とカウント更新を同時実行
+        try await db.runTransaction({ (transaction, errorPointer) -> Any? in
+            let photoDocument: DocumentSnapshot
+            do {
+                try photoDocument = transaction.getDocument(photoRef)
+            } catch let fetchError as NSError {
+                errorPointer?.pointee = fetchError
+                return nil
+            }
+
+            guard let currentCommentCount = photoDocument.data()?["commentCount"] as? Int else {
+                let error = NSError(domain: "AppErrorDomain", code: -1, userInfo: [
+                    NSLocalizedDescriptionKey: "Unable to retrieve comment count"
+                ])
+                errorPointer?.pointee = error
+                return nil
+            }
+
+            // コメント数を減らす（0未満にはしない）
+            transaction.updateData(["commentCount": max(0, currentCommentCount - 1)], forDocument: photoRef)
+
+            // コメントを削除
+            transaction.deleteDocument(commentRef)
+
+            return nil
+        })
+
+        print("🗑️ Comment deleted: \(commentId)")
+    }
+
+    // MARK: - Saved Photos
+
+    // 保存済み（ブックマーク済み）写真を取得
+    func getSavedPhotos(for userId: String) async throws -> [Photo] {
+        do {
+            // ユーザーのブックマークコレクションから保存済み写真IDを取得
+            let bookmarksSnapshot = try await db.collection("users")
+                .document(userId)
+                .collection("bookmarks")
+                .order(by: "createdAt", descending: true)
+                .getDocuments()
+
+            let photoIds = bookmarksSnapshot.documents.map { $0.documentID }
+
+            guard !photoIds.isEmpty else {
+                print("📚 No saved photos found for user \(userId)")
+                return []
+            }
+
+            // 各写真の詳細情報を取得
+            var savedPhotos: [Photo] = []
+
+            for photoId in photoIds {
+                do {
+                    let photoDoc = try await db.collection("photos")
+                        .document(photoId)
+                        .getDocument()
+
+                    if photoDoc.exists {
+                        if let data = photoDoc.data() {
+                            // Photoインスタンスを手動で作成（IDを設定するため）
+                            var photo = Photo(
+                                id: photoDoc.documentID,
+                                userId: data["userId"] as? String ?? "",
+                                countryCode: data["countryCode"] as? String ?? "",
+                                imageURL: data["imageURL"] as? String ?? "",
+                                thumbnailURL: data["thumbnailURL"] as? String ?? "",
+                                originalURL: data["originalURL"] as? String,
+                                createdAt: (data["createdAt"] as? Timestamp)?.dateValue() ?? Date()
+                            )
+                            // その他のプロパティを設定
+                            photo.likeCount = data["likeCount"] as? Int ?? 0
+                            photo.commentCount = data["commentCount"] as? Int ?? 0
+                            photo.caption = data["caption"] as? String
+
+                            savedPhotos.append(photo)
+                        }
+                    }
+                } catch {
+                    print("⚠️ Failed to fetch photo \(photoId): \(error)")
+                    // 個別の写真取得に失敗しても続行
+                    continue
+                }
+            }
+
+            print("📚 Found \(savedPhotos.count) saved photos for user \(userId)")
+            return savedPhotos
+        } catch {
+            print("❌ Error fetching saved photos: \(error)")
+            throw error
+        }
+    }
 }

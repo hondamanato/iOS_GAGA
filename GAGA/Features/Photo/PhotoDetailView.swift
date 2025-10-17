@@ -28,11 +28,15 @@ struct PhotoDetailView: View {
     // コメント・シェア
     @State private var showCommentView = false
     @State private var showShareSheet = false
+    @State private var comments: [Comment] = []
+    @State private var commentCount: Int = 0
+    @State private var isLoadingComments = false
 
     init(photo: Photo, onDelete: (() -> Void)? = nil) {
         self.photo = photo
         self.onDelete = onDelete
         _likeCount = State(initialValue: photo.likeCount)
+        _commentCount = State(initialValue: photo.commentCount)
     }
 
     var body: some View {
@@ -45,6 +49,42 @@ struct PhotoDetailView: View {
                     actionButtonsView
                     captionView
                     locationView
+
+                    // コメント数表示
+                    if commentCount > 0 {
+                        Button {
+                            showCommentView = true
+                        } label: {
+                            Text("コメント\(commentCount)件を表示")
+                                .font(.system(size: 14))
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.top, 4)
+                    }
+
+                    // 最新コメントプレビュー
+                    if !comments.isEmpty {
+                        Divider()
+                            .padding(.vertical, 8)
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            ForEach(Array(comments.prefix(2))) { comment in
+                                CommentPreviewRow(comment: comment)
+                            }
+
+                            if commentCount > 2 {
+                                Button {
+                                    showCommentView = true
+                                } label: {
+                                    Text("すべてのコメントを表示")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundColor(.blue)
+                                }
+                                .padding(.top, 4)
+                            }
+                        }
+                    }
+
                     timestampView
                 }
                 .padding(.horizontal, 12)
@@ -72,7 +112,24 @@ struct PhotoDetailView: View {
             }
         }
         .sheet(isPresented: $showCommentView) {
-            CommentView(photo: photo)
+            CommentView(
+                photo: photo,
+                onCommentAdded: {
+                    // コメント投稿時にコメント数と一覧を更新
+                    Task {
+                        await loadComments()
+                    }
+                },
+                initialComments: comments  // キャッシュされたコメントを渡す
+            )
+        }
+        .onChange(of: showCommentView) { newValue in
+            if newValue {
+                // シートが表示される前に最新のコメントを取得
+                Task {
+                    await loadComments()
+                }
+            }
         }
     }
 
@@ -318,6 +375,29 @@ struct PhotoDetailView: View {
         await MainActor.run {
             isLoading = false
         }
+
+        // コメントを読み込み
+        await loadComments()
+    }
+
+    private func loadComments() async {
+        isLoadingComments = true
+
+        do {
+            let loadedComments = try await FirebaseService.shared.getComments(for: photo.id)
+            await MainActor.run {
+                // すでに新しい順でソートされているため、そのまま使用
+                self.comments = loadedComments
+                self.commentCount = loadedComments.count  // 実際のコメント数を使用
+                self.isLoadingComments = false
+            }
+            print("✅ Loaded \(loadedComments.count) comments for preview")
+        } catch {
+            print("❌ Failed to load comments for preview: \(error)")
+            await MainActor.run {
+                self.isLoadingComments = false
+            }
+        }
     }
 
     // MARK: - Interaction Functions
@@ -432,6 +512,114 @@ struct PhotoDetailView: View {
         formatter.timeStyle = .short
         formatter.locale = Locale(identifier: "ja_JP")
         return formatter.string(from: date)
+    }
+
+    private func formatRelativeDate(_ date: Date) -> String {
+        let now = Date()
+        let calendar = Calendar.current
+        let components = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date, to: now)
+
+        if let years = components.year, years > 0 {
+            return "\(years)年前"
+        } else if let months = components.month, months > 0 {
+            return "\(months)ヶ月前"
+        } else if let days = components.day, days > 0 {
+            return "\(days)日前"
+        } else if let hours = components.hour, hours > 0 {
+            return "\(hours)時間前"
+        } else if let minutes = components.minute, minutes > 0 {
+            return "\(minutes)分前"
+        } else {
+            return "たった今"
+        }
+    }
+}
+
+// MARK: - Comment Preview Row
+
+struct CommentPreviewRow: View {
+    let comment: Comment
+    @State private var user: User?
+    @State private var isLoadingUser = false
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            // プロフィール画像
+            if let user = user, let profileImageURL = user.profileImageURL {
+                CachedAsyncImage(url: profileImageURL) { phase in
+                    switch phase {
+                    case .success(let image):
+                        Circle()
+                            .fill(Color.blue.opacity(0.3))
+                            .frame(width: 28, height: 28)
+                            .overlay(
+                                image
+                                    .resizable()
+                                    .scaledToFill()
+                                    .clipShape(Circle())
+                            )
+                    default:
+                        Circle()
+                            .fill(Color.blue.opacity(0.3))
+                            .frame(width: 28, height: 28)
+                            .overlay(
+                                Image(systemName: "person.fill")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.white)
+                            )
+                    }
+                }
+            } else {
+                Circle()
+                    .fill(Color.blue.opacity(0.3))
+                    .frame(width: 28, height: 28)
+                    .overlay(
+                        Image(systemName: "person.fill")
+                            .font(.system(size: 12))
+                            .foregroundColor(.white)
+                    )
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 4) {
+                    Text(comment.username)
+                        .font(.system(size: 13, weight: .semibold))
+
+                    Text(comment.text)
+                        .font(.system(size: 13))
+                        .lineLimit(2)
+                        .truncationMode(.tail)
+                }
+
+                Text(formatRelativeDate(comment.createdAt ?? Date()))
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+            }
+
+            Spacer()
+        }
+        .task {
+            await loadUser()
+        }
+    }
+
+    private func loadUser() async {
+        guard user == nil && !isLoadingUser else { return }
+
+        isLoadingUser = true
+
+        do {
+            let fetchedUser = try await FirebaseService.shared.getUser(userId: comment.userId)
+            await MainActor.run {
+                self.user = fetchedUser
+            }
+        } catch {
+            print("❌ Failed to load user for comment preview: \(error)")
+        }
+
+        await MainActor.run {
+            isLoadingUser = false
+        }
     }
 
     private func formatRelativeDate(_ date: Date) -> String {

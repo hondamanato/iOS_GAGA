@@ -106,18 +106,17 @@ struct ContentView: View {
                 .hidden()
             }
             .navigationBarHidden(true)
+            .toolbar(.visible, for: .tabBar) // タブバーを明示的に表示
             .onAppear {
                 // 起動時に写真を読み込み
                 Task {
                     await loadPhotos()
                 }
-
-                // タブバーを再表示（投稿詳細画面から戻った際に必要）
-                DispatchQueue.main.async {
-                    if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-                       let tabBarController = windowScene.windows.first?.rootViewController?.children.first as? UITabBarController {
-                        tabBarController.tabBar.isHidden = false
-                    }
+                
+                // プロフィール画面用のマイ地球儀をバックグラウンドでプリロード
+                if let userId = AuthManager.shared.currentUser?.id {
+                    AppStateManager.shared.preloadUserPhotos(userId: userId)
+                    print("🔄 Preloading user photos for profile tab from globe view")
                 }
             }
         }
@@ -171,16 +170,22 @@ struct MainTabView: View {
                 }
                 .tag(1)
 
+            SavedPhotosView()
+                .tabItem {
+                    Label("保存済み", systemImage: "bookmark.fill")
+                }
+                .tag(2)
+
             ProfileView()
                 .tabItem {
                     Label("プロフィール", systemImage: "person.fill")
                 }
-                .tag(2)
+                .tag(3)
         }
         .tint(.black)
         .onChange(of: selectedTab) { newTab in
             // タブが切り替わったときにプロフィールタブの写真をプリロード
-            if newTab == 2, let userId = authManager.currentUser?.id {
+            if newTab == 3, let userId = authManager.currentUser?.id {
                 Task {
                     await AppStateManager.shared.loadUserPhotos(userId: userId, forceRefresh: false)
                     print("🔄 Preloaded photos for profile tab")
